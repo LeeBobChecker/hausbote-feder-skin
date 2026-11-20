@@ -36,7 +36,7 @@ Needs Kiosk Satellite 2026.10.45 or newer.
 
 ## Building
 
-`python3 tools/test.py` and `python3 tools/build.py` need JDK 17+ and an Android SDK with a platform and build-tools. Releases are built by GitHub Actions; publish a release with a `vX.Y.Z` tag.
+`python3 tools/test.py` and `python3 tools/build.py` need JDK 17+ and an Android SDK with a platform and build-tools. Releases are built and published by GitHub Actions: bump `version` in `kiosk-satellite-plugin.json` and push to `main`.
 
 ## Credits
 

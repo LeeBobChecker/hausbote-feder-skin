@@ -1,9 +1,9 @@
 name: Release
+# Publishes a release whenever main carries a manifest version that has no release yet,
+# so a new version is cut by bumping "version" in kiosk-satellite-plugin.json.
 on:
   push:
-    tags: ['v*']
-  release:
-    types: [published]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
@@ -12,36 +12,45 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Validate release
+      - name: Find version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 - <<'PY'
-          import os
-
-          if os.environ['GITHUB_REF_TYPE'] != 'tag':
-              raise SystemExit('Run this workflow on a release tag, not a branch.')
-          PY
-          # A pushed tag gets its release here, so a release can be cut with git alone.
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "Feder und Tinte $GITHUB_REF_NAME"
+          version=$(python3 -c "import json; print(json.load(open('kiosk-satellite-plugin.json'))['version'])")
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "Release v$version exists already, nothing to publish."
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-java@v4
+        if: steps.version.outputs.new == 'true'
         with:
           distribution: temurin
           java-version: '21'
       - name: Set up Android SDK
+        if: steps.version.outputs.new == 'true'
         uses: android-actions/setup-android@v4
       - name: Install Android build tools
+        if: steps.version.outputs.new == 'true'
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Test
+        if: steps.version.outputs.new == 'true'
         run: python3 tools/test.py
       - name: Build
-        run: python3 tools/build.py --android-platform 35 --version "${GITHUB_REF_NAME#v}"
-      - name: Attach plugin assets to the release
+        if: steps.version.outputs.new == 'true'
+        run: python3 tools/build.py --android-platform 35 --version "${{ steps.version.outputs.version }}"
+      - name: Publish release
+        if: steps.version.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" \
+          gh release create "${{ steps.version.outputs.tag }}" --target "$GITHUB_SHA" \
+            --title "${{ steps.version.outputs.tag }}" --notes "Feder und Tinte ${{ steps.version.outputs.tag }}"
+          gh release upload "${{ steps.version.outputs.tag }}" \
             dist/*.zip \
             dist/*.zip.sha256 \
             dist/kiosk-satellite-plugin.json --clobber
