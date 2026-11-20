@@ -13,7 +13,7 @@ import me.jxl.kiosk.plugins.OverlaySpec;
 import me.jxl.kiosk.plugins.PluginHost;
 
 /**
- * Follows the Voice Satellite turn and shows the quill-and-ink overlay while
+ * Follows the Voice Satellite turn and shows the Hausbote broadsheet while
  * this skin is picked. Events arrive on the plugin worker thread; the view
  * reads the shared {@link Turn} on the main thread.
  */
@@ -38,6 +38,12 @@ final class FederSkin {
         volatile boolean reactive = true;
         volatile Typeface regular;
         volatile Typeface italic;
+        volatile Typeface smallCaps;
+        volatile Typeface fraktur;
+        volatile Typeface fat;
+        volatile Typeface oswald;
+        /** Place in the masthead's date line. */
+        volatile String ort = "Ostfildern";
     }
 
     private final Turn turn = new Turn();
@@ -51,7 +57,7 @@ final class FederSkin {
     private String overlay = "hidden";
     private String drawn;
     /** Showing view, touched on the main thread only. */
-    private FederView view;
+    private BoteView view;
 
     synchronized void start(PluginHost host) {
         this.host = host;
@@ -82,6 +88,16 @@ final class FederSkin {
     private void loadFonts(PluginHost host) {
         turn.regular = font(host, "fonts/IMFellEnglish-Regular.ttf", Typeface.SERIF);
         turn.italic = font(host, "fonts/IMFellEnglish-Italic.ttf", Typeface.create(Typeface.SERIF, Typeface.ITALIC));
+        turn.smallCaps = font(host, "fonts/IMFellEnglishSC.ttf", Typeface.SERIF);
+        turn.fraktur = font(host, "fonts/UnifrakturMaguntia.ttf", Typeface.SERIF);
+        turn.fat = font(host, "fonts/AbrilFatface.ttf", Typeface.create(Typeface.SERIF, Typeface.BOLD));
+        turn.oswald = font(host, "fonts/Oswald-Medium.ttf", Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
+    }
+
+    /** Plugin settings: the place in the masthead. */
+    void settings(Map<String, Object> values) {
+        Object ort = values == null ? null : values.get("ort");
+        turn.ort = ort instanceof String ? ((String) ort).trim() : "Ostfildern";
     }
 
     private static Typeface font(PluginHost host, String name, Typeface fallback) {
@@ -173,7 +189,7 @@ final class FederSkin {
 
     /** New words or settings may change the docked card's height. */
     private void poke() {
-        final FederView current = view;
+        final BoteView current = view;
         if (current != null) current.post(current::textChanged);
     }
 
@@ -230,18 +246,18 @@ final class FederSkin {
         }
 
         @Override public View create(Context context, KsTheme theme) {
-            FederView created = new FederView(context, theme, turn, docked);
+            BoteView created = new BoteView(context, theme, turn, docked);
             view = created;
             return created;
         }
 
         @Override public void onThemeChanged(View changed, KsTheme theme) {
-            ((FederView) changed).setKsTheme(theme);
+            ((BoteView) changed).setKsTheme(theme);
         }
 
         @Override public void onDestroy(View destroyed) {
             if (view == destroyed) view = null;
-            ((FederView) destroyed).release();
+            ((BoteView) destroyed).release();
         }
     }
 }

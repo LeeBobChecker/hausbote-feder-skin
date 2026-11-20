@@ -38,7 +38,7 @@ final class TextBlock {
         wordX = new float[n];
         wordLine = new int[n];
         float[] lines = new float[Math.max(1, n)];
-        float space = paint.measureText(" ");
+        float space = Math.max(paint.measureText(" "), paint.getTextSize() * 0.26f);
         int line = 0;
         float x = 0f;
         for (int i = 0; i < n; i++) {
@@ -100,6 +100,36 @@ final class TextBlock {
             if (a > 1f) a = 1f;
             float x = left + (center ? (maxWidth - lineWidth[line]) / 2f : 0f) + wordX[i];
             float y = top + (line - first) * lineHeight + ascent + (1f - a) * rise;
+            paint.setColor(color);
+            paint.setAlpha(Math.round(baseAlpha * a));
+            canvas.drawText(words[i], x, y, paint);
+        }
+    }
+
+    /** Lines shown when printed lines are on paper and at most maxLines fit. */
+    int shownPrinted(int maxLines, int printed) {
+        int p = Math.min(printed, lineCount);
+        return Math.min(Math.max(1, maxLines), p);
+    }
+
+    /**
+     * Draws whole printed lines, the newest ones last; when more are printed
+     * than fit, the oldest scroll away. The newest line takes freshAlpha.
+     */
+    void drawPrinted(Canvas canvas, Paint paint, float left, float top, float maxWidth, int maxLines, int printed,
+                     boolean center, int color, float lineHeight, float freshAlpha) {
+        int p = Math.min(printed, lineCount);
+        if (p <= 0) return;
+        int first = Math.max(0, p - Math.max(1, maxLines));
+        int baseAlpha = Color.alpha(color);
+        float ascent = paint.getTextSize() * 0.95f;
+        for (int i = 0; i < words.length; i++) {
+            int line = wordLine[i];
+            if (line < first) continue;
+            if (line >= p) break;
+            float a = line == p - 1 ? Math.max(0f, Math.min(1f, freshAlpha)) : 1f;
+            float x = left + (center ? (maxWidth - lineWidth[line]) / 2f : 0f) + wordX[i];
+            float y = top + (line - first) * lineHeight + ascent;
             paint.setColor(color);
             paint.setAlpha(Math.round(baseAlpha * a));
             canvas.drawText(words[i], x, y, paint);

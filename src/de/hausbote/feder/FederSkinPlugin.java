@@ -10,10 +10,12 @@ public final class FederSkinPlugin implements KioskPlugin {
     private final FederSkin skin = new FederSkin();
 
     @Override public void start(PluginHost host, Map<String, Object> settings) {
+        skin.settings(settings);
         skin.start(host);
     }
 
     @Override public void configure(Map<String, Object> settings) {
+        skin.settings(settings);
     }
 
     @Override public void execute(String command, Map<String, Object> arguments) {

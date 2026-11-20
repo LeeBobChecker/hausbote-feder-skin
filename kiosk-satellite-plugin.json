@@ -1,16 +1,30 @@
 {
   "schemaVersion": 1,
   "id": "hausbote-feder-skin",
-  "name": "Feder und Tinte",
-  "version": "0.2.0",
+  "name": "Hausbote Extrablatt",
+  "version": "0.3.0",
   "apiVersion": 1,
   "minAndroidSdk": 24,
   "minAppVersion": "2026.10.45",
   "entryClass": "de.hausbote.feder.FederSkinPlugin",
-  "description": "Voice Satellite skin in the style of an old letterpress broadsheet: a talking inkwell with a quill leans in while you speak, rolls its eyes and bubbles while the assistant thinks, and moves its mouth with the answer while the words appear like fresh ink on parchment.",
+  "description": "Voice Satellite skin in the style of the Hausbote dashboard: an Extrablatt with masthead, a red Bekanntmachung with a gold seal for question and answer, Wertmarken that show the stage of the turn and a Billett for the action taken.",
   "author": "LeeBobChecker",
   "license": "Apache-2.0",
-  "capabilities": ["overlay", "host.read", "voice.skin", "voice.text"],
+  "capabilities": [
+    "overlay",
+    "host.read",
+    "voice.skin",
+    "voice.text"
+  ],
   "icon": "icon.png",
-  "voiceSkinThumbnail": "voice-skin.webp"
+  "voiceSkinThumbnail": "voice-skin.webp",
+  "settings": [
+    {
+      "key": "ort",
+      "type": "string",
+      "title": "Ort in der Kopfzeile",
+      "default": "Ostfildern",
+      "description": "Shown in the middle of the masthead's date line."
+    }
+  ]
 }
