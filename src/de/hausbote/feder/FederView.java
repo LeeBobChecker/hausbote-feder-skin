@@ -16,15 +16,14 @@ import java.util.Random;
 import me.jxl.kiosk.plugins.KsTheme;
 
 /**
- * Quill and ink. A pool of ink breathes and swells with the voice, a quill
- * hovers over it and dips in when you speak, writes looping flourishes while
- * the assistant thinks, and the answer appears word by word like fresh ink
- * on parchment. Full screen it covers the kiosk with paper; docked it is a
- * small parchment card at the bottom.
+ * A talking inkwell with a quill. It leans in and its ink ripples while you
+ * speak, rolls its eyes and bubbles while the assistant thinks, and moves its
+ * mouth with the answer while the words appear like fresh ink on parchment.
+ * Full screen it covers the kiosk with paper; docked it is a small parchment
+ * card at the bottom.
  */
 final class FederView extends View {
     private static final float TWO_PI = (float) (Math.PI * 2);
-    private static final int TRAIL = 72;
     private static final int DROPS = 28;
     private static final int SPECKS = 240;
     private static final float DEFAULT_BACKGROUND = 0.97f;
@@ -39,15 +38,14 @@ final class FederView extends View {
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint words = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Path blot = new Path();
+    private final Path body = new Path();
+    private final Path surface = new Path();
     private final Path vane = new Path();
     private final Path shaft = new Path();
     private final Path nib = new Path();
     private final Path star = new Path();
     private final RectF rect = new RectF();
     private final float[] barbs;
-    private final float[] blotX = new float[40];
-    private final float[] blotY = new float[40];
     private final float[] specks = new float[SPECKS * 2];
     private final float[] speckPoints = new float[SPECKS * 2];
     private final Random random = new Random(7);
@@ -60,14 +58,9 @@ final class FederView extends View {
     private long lastFrame;
     private float time;
     private float shownLevel;
-    private float nibX = Float.NaN, nibY, lastNibX, angle = 30f;
-    private final float[] trailX = new float[TRAIL];
-    private final float[] trailY = new float[TRAIL];
-    private final float[] trailAge = new float[TRAIL];
-    private int trailHead, trailCount;
+    private float mouthOpen, lookX, lookY, blink, blinkPhase, blinkTimer = 2f, bubbleTimer;
     private final float[] dropX = new float[DROPS], dropY = new float[DROPS], dropVX = new float[DROPS], dropVY = new float[DROPS];
     private final float[] dropLife = new float[DROPS], dropMax = new float[DROPS], dropR = new float[DROPS];
-    private float dropTimer;
 
     // Text
     private final TextBlock statusBlock = new TextBlock();
@@ -234,66 +227,42 @@ final class FederView extends View {
         canvas.restore();
     }
 
-    // ----------------------------------------------------------- animation
+    // ----------------------------------------------------------- inkwell
 
-    private void spawnDrop(float x, float y, float s, float strength) {
+    /** Bubbles that rise out of the neck while the inkwell thinks. */
+    private void spawnBubble(float x, float y, float s) {
         for (int i = 0; i < DROPS; i++) {
             if (dropLife[i] > 0f) continue;
-            double a = Math.toRadians(-150 + random.nextFloat() * 120);
-            float speed = s * (0.55f + random.nextFloat() * 0.75f) * (0.6f + strength);
             dropX[i] = x;
             dropY[i] = y;
-            dropVX[i] = (float) Math.cos(a) * speed;
-            dropVY[i] = (float) Math.sin(a) * speed;
-            dropMax[i] = dropLife[i] = 0.6f + random.nextFloat() * 0.5f;
-            dropR[i] = s * (0.010f + random.nextFloat() * 0.018f);
+            dropVX[i] = (random.nextFloat() - 0.5f) * s * 0.12f;
+            dropVY[i] = -s * (0.30f + random.nextFloat() * 0.25f);
+            dropMax[i] = dropLife[i] = 1.0f + random.nextFloat() * 0.6f;
+            dropR[i] = s * (0.012f + random.nextFloat() * 0.016f);
             return;
         }
     }
 
-    private void stepDrops(float dt, float s) {
-        float gravity = s * 2.4f;
+    private void stepBubbles(float dt, float s) {
         for (int i = 0; i < DROPS; i++) {
             if (dropLife[i] <= 0f) continue;
             dropLife[i] -= dt;
-            dropVY[i] += gravity * dt;
+            dropVX[i] += (float) Math.sin(time * 3f + i) * s * 0.15f * dt;
             dropX[i] += dropVX[i] * dt;
             dropY[i] += dropVY[i] * dt;
         }
     }
 
-    private void drawDrops(Canvas canvas) {
+    private void drawBubbles(Canvas canvas, float s) {
         for (int i = 0; i < DROPS; i++) {
             if (dropLife[i] <= 0f) continue;
             float k = dropLife[i] / dropMax[i];
-            fill.setColor(withAlpha(blotColor, Math.round(235 * k)));
-            canvas.drawCircle(dropX[i], dropY[i], dropR[i] * (0.55f + 0.45f * k), fill);
-        }
-    }
-
-    private void pushTrail(float x, float y) {
-        trailHead = (trailHead + 1) % TRAIL;
-        trailX[trailHead] = x;
-        trailY[trailHead] = y;
-        trailAge[trailHead] = 0f;
-        if (trailCount < TRAIL) trailCount++;
-    }
-
-    private void drawTrail(Canvas canvas, float dt, float s) {
-        float life = 1.7f;
-        for (int k = 0; k < trailCount; k++) trailAge[(trailHead - k + TRAIL) % TRAIL] += dt;
-        for (int k = 0; k < trailCount - 1; k++) {
-            int a = (trailHead - k + TRAIL) % TRAIL;
-            int b = (trailHead - k - 1 + TRAIL) % TRAIL;
-            float age = trailAge[b];
-            if (age >= life) {
-                trailCount = k + 1;
-                break;
-            }
-            float f = 1f - age / life;
-            line.setColor(withAlpha(dark ? gold : ink, Math.round(215 * f)));
-            line.setStrokeWidth(Math.max(1f, s * 0.016f * (0.45f + 0.55f * f)));
-            canvas.drawLine(trailX[b], trailY[b], trailX[a], trailY[a], line);
+            float grow = 1f + (1f - k) * 0.6f;
+            line.setColor(withAlpha(dark ? gold : ink, Math.round(200 * Math.min(1f, k * 1.6f))));
+            line.setStrokeWidth(Math.max(1f, s * 0.008f));
+            canvas.drawCircle(dropX[i], dropY[i], dropR[i] * grow, line);
+            fill.setColor(withAlpha(0xFFFFFFFF, Math.round(150 * k)));
+            canvas.drawCircle(dropX[i] - dropR[i] * 0.35f, dropY[i] - dropR[i] * 0.35f, dropR[i] * 0.22f, fill);
         }
     }
 
@@ -307,122 +276,240 @@ final class FederView extends View {
         star.close();
     }
 
-    /** Ink pool, sparkles, droplets, writing trail and quill around (cx, cy). */
+    /** The bottle: a squat glass body with shoulders and a short neck, centred on (cx, cy). */
+    private void buildBody(float cx, float cy, float s) {
+        float l = cx - 0.31f * s, r = cx + 0.31f * s, nl = cx - 0.12f * s, nr = cx + 0.12f * s;
+        float top = cy - 0.27f * s, shoulder = cy - 0.20f * s, side = cy - 0.02f * s;
+        float bottom = cy + 0.26f * s, corner = 0.07f * s;
+        body.reset();
+        body.moveTo(nl, top);
+        body.lineTo(nl, shoulder);
+        body.cubicTo(nl - 0.10f * s, shoulder + 0.02f * s, l, cy - 0.15f * s, l, side);
+        body.lineTo(l, bottom - corner);
+        body.quadTo(l, bottom, l + corner, bottom);
+        body.lineTo(r - corner, bottom);
+        body.quadTo(r, bottom, r, bottom - corner);
+        body.lineTo(r, side);
+        body.cubicTo(r, cy - 0.15f * s, nr + 0.10f * s, shoulder + 0.02f * s, nr, shoulder);
+        body.lineTo(nr, top);
+        body.close();
+    }
+
+    private void stepFace(float dt, String state, float lv) {
+        boolean responding = "responding".equals(state);
+        float targetMouth;
+        if (responding) targetMouth = turn.reactive ? Math.min(1f, lv * 1.7f) : 0.35f + 0.35f * (float) Math.sin(time * 13f);
+        else targetMouth = 0f;
+        mouthOpen += (targetMouth - mouthOpen) * Math.min(1f, dt * 18f);
+
+        float tx, ty;
+        if ("processing".equals(state)) {
+            tx = 0.8f * (float) Math.sin(time * 1.6f);
+            ty = -0.8f;
+        } else if ("listening".equals(state)) {
+            tx = 0.25f * (float) Math.sin(time * 0.7f);
+            ty = 0.1f;
+        } else if (responding) {
+            tx = 0.2f * (float) Math.sin(time * 0.9f);
+            ty = 0f;
+        } else {
+            tx = 0f;
+            ty = 0f;
+        }
+        lookX += (tx - lookX) * Math.min(1f, dt * 5f);
+        lookY += (ty - lookY) * Math.min(1f, dt * 5f);
+
+        blinkTimer -= dt;
+        if (blinkTimer <= 0f) {
+            blinkTimer = 2.5f + random.nextFloat() * 3f;
+            blinkPhase = 0.18f;
+        }
+        if (blinkPhase > 0f) {
+            blinkPhase -= dt;
+            float p = 1f - Math.max(0f, blinkPhase) / 0.18f;
+            blink = p < 0.5f ? p * 2f : (1f - p) * 2f;
+        } else {
+            blink = 0f;
+        }
+    }
+
+    private void drawFace(Canvas canvas, float cx, float cy, float s, String state) {
+        boolean listening = "listening".equals(state);
+        boolean processing = "processing".equals(state);
+        int cream = 0xFFFBF5E6;
+        float eyeY = cy + 0.035f * s + lookY * 0.008f * s;
+        float eyeDX = 0.105f * s;
+        float grow = listening ? 1.12f : 1f;
+        float eyeW = 0.058f * s * grow, eyeH = 0.072f * s * grow * (1f - 0.92f * blink);
+        for (int side = -1; side <= 1; side += 2) {
+            float ex = cx + side * eyeDX + lookX * 0.01f * s;
+            fill.setColor(cream);
+            rect.set(ex - eyeW, eyeY - eyeH, ex + eyeW, eyeY + eyeH);
+            canvas.drawOval(rect, fill);
+            if (eyeH > 0.012f * s) {
+                float px = ex + lookX * 0.022f * s, py = eyeY + lookY * 0.026f * s;
+                fill.setColor(ink);
+                canvas.drawCircle(px, py, 0.028f * s * grow, fill);
+                fill.setColor(0xFFFFFFFF);
+                canvas.drawCircle(px - 0.009f * s, py - 0.010f * s, 0.008f * s, fill);
+            }
+            // Brows.
+            // Listening: both brows up. Thinking: one brow raised.
+            float lift = listening ? 0.018f * s : processing && side < 0 ? 0.03f * s : 0f;
+            float tilt = processing && side > 0 ? -0.008f * s : 0f;
+            line.setColor(cream);
+            line.setStrokeWidth(Math.max(1.5f, 0.013f * s));
+            canvas.drawLine(ex - eyeW * 0.9f, eyeY - 0.072f * s * grow - 0.022f * s - lift + tilt,
+                ex + eyeW * 0.9f, eyeY - 0.072f * s * grow - 0.030f * s - lift - tilt, line);
+        }
+        // Cheeks.
+        fill.setColor(withAlpha(seal, 120));
+        canvas.drawCircle(cx - 0.19f * s, cy + 0.125f * s, 0.028f * s, fill);
+        canvas.drawCircle(cx + 0.19f * s, cy + 0.125f * s, 0.028f * s, fill);
+
+        float my = cy + 0.165f * s;
+        if (mouthOpen > 0.06f) {
+            float mw = 0.10f * s * (1f - 0.25f * mouthOpen);
+            float mh = 0.012f * s + 0.07f * s * mouthOpen;
+            rect.set(cx - mw, my - mh, cx + mw, my + mh);
+            fill.setColor(0xFF5C1A14);
+            canvas.drawOval(rect, fill);
+            if (mouthOpen > 0.3f) {
+                fill.setColor(0xFFB04A3A);
+                rect.set(cx - mw * 0.55f, my + mh * 0.15f, cx + mw * 0.55f, my + mh * 0.95f);
+                canvas.drawOval(rect, fill);
+            }
+            line.setColor(cream);
+            line.setStrokeWidth(Math.max(1.2f, 0.009f * s));
+            rect.set(cx - mw, my - mh, cx + mw, my + mh);
+            canvas.drawOval(rect, line);
+        } else if (processing) {
+            line.setColor(cream);
+            line.setStrokeWidth(Math.max(1.5f, 0.013f * s));
+            rect.set(cx - 0.02f * s, my - 0.03f * s, cx + 0.08f * s, my + 0.02f * s);
+            canvas.drawArc(rect, 20f, 120f, false, line);
+        } else {
+            line.setColor(cream);
+            line.setStrokeWidth(Math.max(1.5f, 0.013f * s));
+            float wide = listening ? 0.045f : 0.065f;
+            rect.set(cx - wide * s, my - 0.05f * s, cx + wide * s, my + 0.025f * s);
+            canvas.drawArc(rect, 25f, 130f, false, line);
+        }
+    }
+
+    /** The talking inkwell with its quill, centred on (cx, cy). */
     private void drawEmblem(Canvas canvas, float cx, float cy, float s, float dt, boolean small) {
         String state = turn.state;
         boolean processing = "processing".equals(state);
-        boolean revealing = answerBlock.wordCount() > 0 && revealed < answerBlock.wordCount();
-        boolean writing = processing || ("responding".equals(state) && revealing);
+        boolean responding = "responding".equals(state);
         float lv = shownLevel;
-        float r = s * 0.20f * (1f + 0.30f * lv);
+        stepFace(dt, state, lv);
 
-        // Shadow under the floating ink.
+        float bottom = cy + 0.26f * s;
+        // Shadow on the paper.
         fill.setShader(null);
-        fill.setColor(withAlpha(ink, small ? 22 : 30));
-        rect.set(cx - r * 1.15f, cy + r * 1.2f, cx + r * 1.15f, cy + r * 1.5f);
+        fill.setColor(withAlpha(ink, small ? 26 : 34));
+        rect.set(cx - 0.36f * s, bottom - 0.03f * s, cx + 0.36f * s, bottom + 0.05f * s);
         canvas.drawOval(rect, fill);
 
-        // The pool of ink: a soft, restless blot.
-        int n = blotX.length;
-        for (int i = 0; i < n; i++) {
-            float a = i / (float) n * TWO_PI;
-            float wobble = 1f
-                + 0.07f * (float) Math.sin(3 * a + time * 1.1f)
-                + 0.05f * (float) Math.sin(5 * a - time * 0.8f)
-                + 0.03f * (float) Math.sin(8 * a + time * 1.9f)
-                + lv * 0.09f * (float) Math.sin(6 * a + time * 6f);
-            blotX[i] = cx + (float) Math.cos(a) * r * wobble;
-            blotY[i] = cy + (float) Math.sin(a) * r * wobble * 0.92f;
-        }
-        blot.reset();
-        blot.moveTo((blotX[n - 1] + blotX[0]) / 2f, (blotY[n - 1] + blotY[0]) / 2f);
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            blot.quadTo(blotX[i], blotY[i], (blotX[i] + blotX[j]) / 2f, (blotY[i] + blotY[j]) / 2f);
-        }
-        blot.close();
-        fill.setColor(blotColor);
-        canvas.drawPath(blot, fill);
-        if (dark) {
-            line.setColor(withAlpha(gold, 110));
-            line.setStrokeWidth(1.2f * dp);
-            canvas.drawPath(blot, line);
-        }
-        // Sheen.
-        line.setColor(withAlpha(dark ? gold : paper, dark ? 120 : 95));
-        line.setStrokeWidth(Math.max(1f, s * 0.014f));
-        rect.set(cx - r * 0.62f, cy - r * 0.64f, cx + r * 0.18f, cy + r * 0.08f);
-        canvas.drawArc(rect, 200f, 55f, false, line);
-        fill.setColor(withAlpha(dark ? gold : paper, dark ? 140 : 110));
-        canvas.drawCircle(cx - r * 0.12f, cy - r * 0.48f, Math.max(1f, s * 0.011f), fill);
+        // Squash and stretch: it leans in while listening and bounces while it speaks.
+        float stretch = "listening".equals(state) ? 0.07f * lv : responding ? 0.05f * mouthOpen : 0f;
+        float breathe = 0.012f * (float) Math.sin(time * 2.0f);
+        float sy = 1f + stretch + breathe, sx = 1f - stretch * 0.45f - breathe * 0.5f;
+        canvas.save();
+        canvas.translate(cx, bottom);
+        canvas.scale(sx, sy);
+        canvas.translate(-cx, -bottom);
 
-        // Sparkles around the ink.
+        // The quill stands in the ink, behind the glass.
+        float wiggle = responding ? 4f * (float) Math.sin(time * 9f) * Math.max(0.3f, mouthOpen)
+            : processing ? 6f * (float) Math.sin(time * 2.4f) : 2.5f * (float) Math.sin(time * 1.3f);
+        float bob = processing ? 0.02f * s * (float) Math.sin(time * 4.8f) : 0f;
+        drawQuill(canvas, cx + 0.02f * s, cy - 0.04f * s + bob, s * (small ? 0.80f : 1.05f), 24f + wiggle);
+
+        buildBody(cx, cy, s);
+        fill.setColor(withAlpha(dark ? 0xFF2A3644 : 0xFFF7F0DF, dark ? 170 : 175));
+        canvas.drawPath(body, fill);
+
+        // Ink inside the glass, with a restless surface, rising bubbles and the face.
+        canvas.save();
+        canvas.clipPath(body);
+        float l = cx - 0.32f * s, r = cx + 0.32f * s;
+        float surfaceY = cy - 0.115f * s - 0.025f * s * lv;
+        float amp = s * (0.007f + 0.022f * lv + (processing ? 0.012f : 0f));
+        surface.reset();
+        int steps = 24;
+        for (int i = 0; i <= steps; i++) {
+            float x = l + (r - l) * i / steps;
+            float y = surfaceY + amp * (float) Math.sin((x - cx) / s * 18f + time * 3.2f)
+                + amp * 0.5f * (float) Math.sin((x - cx) / s * 31f - time * 2.1f);
+            if (i == 0) surface.moveTo(x, y);
+            else surface.lineTo(x, y);
+        }
+        surface.lineTo(r, bottom + s);
+        surface.lineTo(l, bottom + s);
+        surface.close();
+        fill.setColor(blotColor);
+        canvas.drawPath(surface, fill);
+        if (processing || "listening".equals(state)) {
+            int count = processing ? 7 : 3;
+            for (int k = 0; k < count; k++) {
+                float phase = (time * (processing ? 0.55f : 0.3f) + k / (float) count) % 1f;
+                float by = bottom - 0.03f * s - phase * (bottom - surfaceY - 0.03f * s);
+                float bx = cx + 0.20f * s * (float) Math.sin(k * 2.3f + time * 0.8f) * (k % 2 == 0 ? 1f : -1f);
+                line.setColor(withAlpha(0xFFFBF5E6, Math.round(90 * (1f - phase))));
+                line.setStrokeWidth(Math.max(1f, s * 0.006f));
+                canvas.drawCircle(bx, by, s * 0.011f * (0.6f + phase), line);
+            }
+        }
+        drawFace(canvas, cx, cy, s, state);
+        canvas.restore();
+
+        // Glass outline, lip and highlights.
+        line.setColor(withAlpha(dark ? ink : ink, 220));
+        line.setStrokeWidth(Math.max(1.5f, s * 0.011f));
+        canvas.drawPath(body, line);
+        rect.set(cx - 0.155f * s, cy - 0.315f * s, cx + 0.155f * s, cy - 0.255f * s);
+        fill.setColor(withAlpha(dark ? 0xFF3A4757 : 0xFFE9DDC2, 255));
+        canvas.drawRoundRect(rect, 0.025f * s, 0.025f * s, fill);
+        canvas.drawRoundRect(rect, 0.025f * s, 0.025f * s, line);
+        line.setColor(withAlpha(0xFFFFFFFF, dark ? 90 : 170));
+        line.setStrokeWidth(Math.max(1.5f, s * 0.018f));
+        canvas.drawLine(cx - 0.255f * s, cy - 0.04f * s, cx - 0.255f * s, cy + 0.17f * s, line);
+        line.setStrokeWidth(Math.max(1f, s * 0.012f));
+        canvas.drawLine(cx - 0.20f * s, cy - 0.165f * s, cx - 0.235f * s, cy - 0.12f * s, line);
+        canvas.restore();
+
+        // Thinking bubbles out of the neck.
+        if (processing) {
+            bubbleTimer += dt;
+            if (bubbleTimer > (small ? 0.45f : 0.3f)) {
+                bubbleTimer = 0f;
+                spawnBubble(cx + (random.nextFloat() - 0.5f) * 0.12f * s, cy - 0.32f * s, s);
+            }
+        }
+        stepBubbles(dt, s);
+        drawBubbles(canvas, s);
+
+        // Sparkles around it.
         if (!small) {
-            float spin = time * (processing ? 0.55f : 0.12f);
+            float spin = time * (processing ? 0.5f : 0.12f);
             for (int k = 0; k < 7; k++) {
                 float a = k / 7f * TWO_PI + spin;
                 float twinkle = 0.5f + 0.5f * (float) Math.sin(time * (1.3f + k * 0.37f) + k * 1.7f);
-                float boost = processing ? 0.8f : 0.35f + 0.65f * lv;
+                float boost = processing ? 0.8f : responding ? 0.5f + 0.5f * mouthOpen : 0.35f + 0.65f * lv;
                 float alpha = twinkle * boost;
                 if (alpha < 0.05f) continue;
-                float dist = s * (0.58f + 0.05f * (float) Math.sin(time * 0.7f + k));
-                buildStar(s * 0.032f * (0.6f + 0.7f * twinkle));
+                float dist = s * (0.62f + 0.05f * (float) Math.sin(time * 0.7f + k));
+                buildStar(s * 0.030f * (0.6f + 0.7f * twinkle));
                 canvas.save();
-                canvas.translate(cx + (float) Math.cos(a) * dist, cy + (float) Math.sin(a) * dist * 0.8f);
+                canvas.translate(cx + (float) Math.cos(a) * dist, cy + (float) Math.sin(a) * dist * 0.75f);
                 fill.setColor(withAlpha(gold, Math.round(235 * Math.min(1f, alpha))));
                 canvas.drawPath(star, fill);
                 canvas.restore();
             }
         }
-
-        // Where the nib wants to be.
-        float length = s * (small ? 0.85f : 1.15f);
-        float baseX = cx + s * 0.02f;
-        float baseY = cy - r - s * (small ? 0.09f : 0.13f);
-        float tx, ty;
-        if (processing) {
-            float t = time * 2.2f;
-            float w = s * (small ? 0.20f : 0.30f);
-            tx = cx + w * (float) Math.sin(t);
-            ty = cy - r - s * (small ? 0.16f : 0.20f) + s * (small ? 0.05f : 0.07f) * (float) Math.sin(2 * t);
-        } else if (writing) {
-            tx = baseX + s * 0.07f * (float) Math.sin(time * 7f);
-            ty = baseY - s * 0.05f + s * 0.025f * (float) Math.sin(time * 11f);
-        } else {
-            tx = baseX + s * 0.02f * (float) Math.sin(time * 0.9f);
-            ty = baseY + s * 0.025f * (float) Math.sin(time * 1.8f) + lv * s * 0.17f;
-        }
-        if (Float.isNaN(nibX)) {
-            nibX = tx;
-            nibY = ty;
-            lastNibX = tx;
-        }
-        float ease = Math.min(1f, dt * (processing ? 14f : 7f));
-        nibX += (tx - nibX) * ease;
-        nibY += (ty - nibY) * ease;
-        float vx = dt > 0f ? (nibX - lastNibX) / dt : 0f;
-        lastNibX = nibX;
-        float targetAngle = 30f + Math.max(-14f, Math.min(14f, vx / s * 9f)) + 3f * (float) Math.sin(time * 1.3f);
-        angle += (targetAngle - angle) * Math.min(1f, dt * 6f);
-
-        if (writing) pushTrail(nibX, nibY);
-        drawTrail(canvas, dt, s);
-
-        // Ink splashes up when you speak loudly or the nib dips in.
-        if (!writing && "listening".equals(state)) {
-            dropTimer += dt;
-            boolean dipped = nibY > cy - r * 1.08f;
-            if ((lv > 0.35f || dipped) && dropTimer > (small ? 0.16f : 0.09f)) {
-                dropTimer = 0f;
-                spawnDrop(cx + (random.nextFloat() - 0.5f) * r * 0.8f, cy - r * 0.85f, s, lv);
-            }
-        }
-        stepDrops(dt, s);
-        drawDrops(canvas);
-
-        drawQuill(canvas, nibX, nibY, length, angle);
     }
-
     // -------------------------------------------------------------- drawing
 
     private float textSize(float sp) {
@@ -448,7 +535,7 @@ final class FederView extends View {
     private String status() {
         String state = turn.state;
         if ("listening".equals(state)) return "Ich höre zu …";
-        if ("processing".equals(state)) return "Die Feder überlegt …";
+        if ("processing".equals(state)) return "Das Tintenfass überlegt …";
         return "";
     }
 
@@ -558,13 +645,13 @@ final class FederView extends View {
         drawDiamond(canvas, c, h - c, 4.5f * dp, bg);
         drawDiamond(canvas, w - c, h - c, 4.5f * dp, bg);
 
-        // The quill reaches about 1.33 s above the ink; keep it inside the frame.
-        float s = Math.min(Math.min(w, h) * 0.34f, h * 0.24f);
-        float cx = w / 2f, cy = Math.max(h * 0.30f, s * 1.33f + 44f * dp);
+        // The quill reaches about 1.05 s above the inkwell's centre; keep it inside the frame.
+        float s = Math.min(Math.min(w, h) * 0.42f, h * 0.27f);
+        float cx = w / 2f, cy = Math.max(h * 0.31f, s * 1.08f + 44f * dp);
         drawEmblem(canvas, cx, cy, s, dt, false);
 
         // Rule between emblem and words.
-        float ruleY = cy + s * 0.78f;
+        float ruleY = cy + s * 0.48f;
         line.setColor(withAlpha(ink, 150));
         line.setStrokeWidth(1f * dp);
         canvas.drawLine(cx - s * 0.62f, ruleY, cx - 10f * dp, ruleY, line);
@@ -647,8 +734,8 @@ final class FederView extends View {
 
         float pad = dockPad(), box = dockEmblem();
         float boxH = h - 3f * dp;
-        float s = box * 0.78f;
-        drawEmblem(canvas, pad + box / 2f, boxH / 2f + s * 0.28f, s, dt, true);
+        float s = box * 0.92f;
+        drawEmblem(canvas, pad + box / 2f, boxH / 2f + s * 0.16f, s, dt, true);
 
         float left = pad + box + 14f * dp;
         float width = dockTextWidth(w);

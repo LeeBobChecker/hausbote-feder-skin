@@ -2,12 +2,14 @@
 
 A Voice Satellite skin for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite), drawn in the style of an old letterpress broadsheet. It was made for the "Hausbote" Home Assistant dashboard, but works with any dashboard.
 
-- **Listening:** a pool of ink breathes and swells with your voice; the quill dips in and splashes droplets when you speak up. Small golden sparkles twinkle around it.
-- **Thinking:** the quill writes looping flourishes that slowly fade from the paper.
-- **Answer:** your words appear in italics in quotation marks, the answer is written word by word like fresh ink. The last action the assistant took is shown in red at the bottom.
+A talking inkwell with a quill stands on the page, with a face in its ink.
+
+- **Listening:** it raises its brows, leans in and its ink ripples with your voice. Small golden sparkles twinkle around it.
+- **Thinking:** it looks up, raises one brow, the quill wobbles and bubbles rise out of the neck.
+- **Answer:** its mouth moves with the spoken answer. Your words appear in italics in quotation marks, the answer is written word by word like fresh ink. The last action the assistant took is shown in red at the bottom.
 - **Full screen:** a parchment page with a printer's frame. **Docked:** a small parchment card at the bottom that leaves the dashboard usable.
 
-The status lines are in German ("Ich höre zu …", "Die Feder überlegt …").
+The status lines are in German ("Ich höre zu …", "Das Tintenfass überlegt …").
 
 ## Settings
 
